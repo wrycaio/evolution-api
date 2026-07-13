@@ -37,6 +37,12 @@ jobs:
 
     - name: Generate Prisma client
       run: npm run db:generate
+      env:
+        # prisma.config.ts resolves datasource.url from this variable when the Prisma CLI
+        # loads, and there is no .env on the runner. `prisma generate` never opens a
+        # connection, so any syntactically valid URI works.
+        DATABASE_PROVIDER: postgresql
+        DATABASE_CONNECTION_URI: postgresql://user:pass@localhost:5432/evolution?schema=public
 
     - name: Check build
       run: npm run build
