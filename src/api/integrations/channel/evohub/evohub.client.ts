@@ -1,5 +1,6 @@
 import { ConfigService, EvolutionHub } from '@config/env.config';
 import { Logger } from '@config/logger.config';
+import { BadRequestException } from '@exceptions';
 import axios, { AxiosInstance } from 'axios';
 
 // ---- Tipos do contrato do hub (espelham evolutionHubService.ts do frontend) ----
@@ -137,6 +138,15 @@ export class EvoHubClient {
     return this.normalizeChannelList(data);
   }
 
+  // SSRF guard: channel/webhook ids do hub são UUID (o hub faz uuid.Parse). Validamos
+  // ANTES de interpolar o id no path da request ao hub — recusa path/URL injection
+  // vinda de req.params/req.body em vez de repassá-la para o control-plane.
+  private assertHubId(id: string): void {
+    if (!/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(id)) {
+      throw new BadRequestException(`invalid hub id: ${id}`);
+    }
+  }
+
   // Normaliza a resposta de lista do hub para HubChannel[] (channels|data|array nu).
   private normalizeChannelList(data: any): HubChannel[] {
     if (Array.isArray(data)) return data;
@@ -152,6 +162,7 @@ export class EvoHubClient {
    * server-side; o front NUNCA vê o token.
    */
   async getChannel(id: string): Promise<HubChannel> {
+    this.assertHubId(id);
     const { data } = await this.http.get(`/channels/${id}`);
     return data;
   }
@@ -168,6 +179,7 @@ export class EvoHubClient {
 
   /** Webhooks já ASSOCIADOS ao canal: GET /api/v1/channels/:id/webhooks → { webhooks, count }. */
   async listChannelWebhooks(channelId: string): Promise<HubWebhookInfo[]> {
+    this.assertHubId(channelId);
     const { data } = await this.http.get(`/channels/${channelId}/webhooks`);
     return this.normalizeWebhookList(data);
   }
@@ -187,27 +199,51 @@ export class EvoHubClient {
 
   /** POST /api/v1/webhooks/:id/associate — associa um webhook existente ao canal. */
   async associateWebhook(webhookId: string, channelId: string): Promise<void> {
+    this.assertHubId(webhookId);
+    this.assertHubId(channelId);
     await this.http.post(`/webhooks/${webhookId}/associate`, { channel_id: channelId });
   }
 
   /**
-   * Garante (idempotente) que o canal tem um webhook ativo apontando para
+   * PUT /api/v1/webhooks/:id/status — reativa/desativa um webhook. O hub só aceita
+   * `active`|`inactive`; reativar com `active` é o caminho oficial para tirar um
+   * webhook do estado auto-`disabled` (webhook.go:104).
+   */
+  async setWebhookStatus(webhookId: string, status: 'active' | 'inactive'): Promise<void> {
+    this.assertHubId(webhookId);
+    await this.http.put(`/webhooks/${webhookId}/status`, { status });
+  }
+
+  /**
+   * Garante (idempotente) que o canal tem um webhook ATIVO apontando para
    * `webhookUrl` — o caminho single-shot do provision não existe no link-existing,
-   * e sem webhook o canal envia mas nunca RECEBE mensagens. Ordem:
-   * 1) já associado ao canal com a mesma URL → no-op;
-   * 2) webhook do usuário com a mesma URL → associa (evita duplicar; um webhook
-   *    all_channels com a URL já cobre o canal, também no-op);
+   * e sem webhook (ou com webhook não-`active`) o canal envia mas nunca RECEBE.
+   *
+   * O dispatcher do hub só entrega quando `status == 'active'` (webhook_dispatcher.go:294);
+   * um webhook em `disabled` (auto-desativado após falhas de entrega) ou `inactive`
+   * casa a URL mas NÃO entrega, então reativamos em vez de tratar como pronto —
+   * senão o re-link responde 201 e o canal segue surdo. Ordem:
+   * 1) já associado ao canal com a mesma URL → reativa se não estiver `active`;
+   * 2) webhook do usuário com a mesma URL → reativa e associa (all_channels já
+   *    cobre o canal, então só garante que está ativo);
    * 3) cria novo com `channels: [channelId]` (single-shot) e `events: []`
    *    (vazio = TODOS os eventos — webhook_service.go:98). Secret = recipe
    *    register-with-own-secret, igual ao provision.
    */
   async ensureChannelWebhook(channelId: string, webhookUrl: string): Promise<void> {
+    this.assertHubId(channelId);
+
     const associated = await this.listChannelWebhooks(channelId);
-    if (associated.some((w) => w.url === webhookUrl && w.status !== 'inactive')) return;
+    const match = associated.find((w) => w.url === webhookUrl);
+    if (match) {
+      if (match.status !== 'active') await this.setWebhookStatus(match.id, 'active');
+      return;
+    }
 
     const all = await this.listWebhooks();
-    const existing = all.find((w) => w.url === webhookUrl && w.status !== 'inactive');
+    const existing = all.find((w) => w.url === webhookUrl);
     if (existing) {
+      if (existing.status !== 'active') await this.setWebhookStatus(existing.id, 'active');
       if (!existing.all_channels) await this.associateWebhook(existing.id, channelId);
       return;
     }
@@ -271,6 +307,7 @@ export class EvoHubClient {
    * Evolution; 'byo' exige channel_credentials no hub.
    */
   async connectToMeta(channelId: string, req: MetaConnectRequest): Promise<MetaConnectResponse> {
+    this.assertHubId(channelId);
     const { data } = await this.http.post(`/channels/${channelId}/meta-connect`, req);
     return data;
   }
