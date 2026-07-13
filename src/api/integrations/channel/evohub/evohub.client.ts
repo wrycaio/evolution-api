@@ -52,6 +52,15 @@ export interface HubChannel {
   meta_connection?: HubMetaConnection | null;
 }
 
+// Webhook do hub (WebhookResponse — webhook.go:116). Só os campos que usamos.
+export interface HubWebhookInfo {
+  id: string;
+  name?: string;
+  url: string;
+  status?: string;
+  all_channels?: boolean;
+}
+
 // ---- Criar-novo (POST /api/v1/channels) ----
 export interface HubProvisionRequest {
   name: string;
@@ -153,6 +162,65 @@ export class EvoHubClient {
    */
   async getAvailableChannels(type?: 'whatsapp' | 'facebook' | 'instagram'): Promise<HubChannel[]> {
     return this.listChannels(type);
+  }
+
+  // ---- Webhooks (inbound do hub -> evolution-api) ----
+
+  /** Webhooks já ASSOCIADOS ao canal: GET /api/v1/channels/:id/webhooks → { webhooks, count }. */
+  async listChannelWebhooks(channelId: string): Promise<HubWebhookInfo[]> {
+    const { data } = await this.http.get(`/channels/${channelId}/webhooks`);
+    return this.normalizeWebhookList(data);
+  }
+
+  /** Todos os webhooks do usuário da API-key: GET /api/v1/webhooks. */
+  async listWebhooks(): Promise<HubWebhookInfo[]> {
+    const { data } = await this.http.get('/webhooks');
+    return this.normalizeWebhookList(data);
+  }
+
+  private normalizeWebhookList(data: any): HubWebhookInfo[] {
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data?.webhooks)) return data.webhooks;
+    if (Array.isArray(data?.data)) return data.data;
+    return [];
+  }
+
+  /** POST /api/v1/webhooks/:id/associate — associa um webhook existente ao canal. */
+  async associateWebhook(webhookId: string, channelId: string): Promise<void> {
+    await this.http.post(`/webhooks/${webhookId}/associate`, { channel_id: channelId });
+  }
+
+  /**
+   * Garante (idempotente) que o canal tem um webhook ativo apontando para
+   * `webhookUrl` — o caminho single-shot do provision não existe no link-existing,
+   * e sem webhook o canal envia mas nunca RECEBE mensagens. Ordem:
+   * 1) já associado ao canal com a mesma URL → no-op;
+   * 2) webhook do usuário com a mesma URL → associa (evita duplicar; um webhook
+   *    all_channels com a URL já cobre o canal, também no-op);
+   * 3) cria novo com `channels: [channelId]` (single-shot) e `events: []`
+   *    (vazio = TODOS os eventos — webhook_service.go:98). Secret = recipe
+   *    register-with-own-secret, igual ao provision.
+   */
+  async ensureChannelWebhook(channelId: string, webhookUrl: string): Promise<void> {
+    const associated = await this.listChannelWebhooks(channelId);
+    if (associated.some((w) => w.url === webhookUrl && w.status !== 'inactive')) return;
+
+    const all = await this.listWebhooks();
+    const existing = all.find((w) => w.url === webhookUrl && w.status !== 'inactive');
+    if (existing) {
+      if (!existing.all_channels) await this.associateWebhook(existing.id, channelId);
+      return;
+    }
+
+    const cfg = this.configService.get<EvolutionHub>('EVOLUTION_HUB');
+    const body: Record<string, any> = {
+      name: 'evolution-api inbound',
+      url: webhookUrl,
+      events: [],
+      channels: [channelId],
+    };
+    if (cfg.WEBHOOK_SECRET) body.secret = cfg.WEBHOOK_SECRET;
+    await this.http.post('/webhooks', body);
   }
 
   // ---- Fase 2 ----

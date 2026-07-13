@@ -76,7 +76,22 @@ export class EvoHubControlPlaneRouter extends RouterBroker {
         return res.status(422).json({ error: 'hub channel missing token or phone_number_id' });
       }
 
-      // 2) cria a Instance EVOHUB pelo caminho padrão, com o token JÁ resolvido
+      // 2) garante o webhook inbound no hub ANTES de criar a Instance (o provision
+      //    registra via single-shot; sem isso o canal vinculado envia mas nunca
+      //    recebe). Ordem proposital: se falhar, nada foi criado e o retry é seguro.
+      const serverUrl = configService.get<HttpServer>('SERVER').URL;
+      if (serverUrl) {
+        try {
+          await evoHubClient.ensureChannelWebhook(hub_channel_id, `${serverUrl}/webhook/evohub`);
+        } catch (e) {
+          return res.status(502).json({
+            error: 'failed to register inbound webhook on hub',
+            detail: e?.response?.data ?? e?.message,
+          });
+        }
+      }
+
+      // 3) cria a Instance EVOHUB pelo caminho padrão, com o token JÁ resolvido
       //    (flui pelo channel.controller.init() guard sem relaxá-lo — contrato §5).
       const created = await instanceController.createInstance({
         instanceName: (req.body.instanceName as string) || `evohub-${phoneNumberId}`,
