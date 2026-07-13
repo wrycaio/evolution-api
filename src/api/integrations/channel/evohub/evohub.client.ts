@@ -53,6 +53,14 @@ export interface HubChannel {
   meta_connection?: HubMetaConnection | null;
 }
 
+// SSRF guard: channel/webhook ids do hub são UUID (o hub faz uuid.Parse). O teste roda
+// INLINE em cada método que interpola o id no path da request — recusa path/URL injection
+// vinda de req.params/req.body em vez de repassá-la ao control-plane. Extrair o guard para
+// um método (`assertHubId`) protege igual em runtime, mas a análise de fluxo do CodeQL não
+// o reconhece como barreira através da fronteira de função e o js/request-forgery continua
+// acusando o sink; o teste inline é o que satisfaz scanner e runtime ao mesmo tempo.
+const HUB_ID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
 // Webhook do hub (WebhookResponse — webhook.go:116). Só os campos que usamos.
 export interface HubWebhookInfo {
   id: string;
@@ -138,15 +146,6 @@ export class EvoHubClient {
     return this.normalizeChannelList(data);
   }
 
-  // SSRF guard: channel/webhook ids do hub são UUID (o hub faz uuid.Parse). Validamos
-  // ANTES de interpolar o id no path da request ao hub — recusa path/URL injection
-  // vinda de req.params/req.body em vez de repassá-la para o control-plane.
-  private assertHubId(id: string): void {
-    if (!/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(id)) {
-      throw new BadRequestException(`invalid hub id: ${id}`);
-    }
-  }
-
   // Normaliza a resposta de lista do hub para HubChannel[] (channels|data|array nu).
   private normalizeChannelList(data: any): HubChannel[] {
     if (Array.isArray(data)) return data;
@@ -162,7 +161,7 @@ export class EvoHubClient {
    * server-side; o front NUNCA vê o token.
    */
   async getChannel(id: string): Promise<HubChannel> {
-    this.assertHubId(id);
+    if (!HUB_ID.test(id)) throw new BadRequestException(`invalid hub id: ${id}`);
     const { data } = await this.http.get(`/channels/${id}`);
     return data;
   }
@@ -179,7 +178,7 @@ export class EvoHubClient {
 
   /** Webhooks já ASSOCIADOS ao canal: GET /api/v1/channels/:id/webhooks → { webhooks, count }. */
   async listChannelWebhooks(channelId: string): Promise<HubWebhookInfo[]> {
-    this.assertHubId(channelId);
+    if (!HUB_ID.test(channelId)) throw new BadRequestException(`invalid hub id: ${channelId}`);
     const { data } = await this.http.get(`/channels/${channelId}/webhooks`);
     return this.normalizeWebhookList(data);
   }
@@ -199,8 +198,8 @@ export class EvoHubClient {
 
   /** POST /api/v1/webhooks/:id/associate — associa um webhook existente ao canal. */
   async associateWebhook(webhookId: string, channelId: string): Promise<void> {
-    this.assertHubId(webhookId);
-    this.assertHubId(channelId);
+    if (!HUB_ID.test(webhookId)) throw new BadRequestException(`invalid hub id: ${webhookId}`);
+    if (!HUB_ID.test(channelId)) throw new BadRequestException(`invalid hub id: ${channelId}`);
     await this.http.post(`/webhooks/${webhookId}/associate`, { channel_id: channelId });
   }
 
@@ -210,13 +209,13 @@ export class EvoHubClient {
    * webhook do estado auto-`disabled` (webhook.go:104).
    */
   async setWebhookStatus(webhookId: string, status: 'active' | 'inactive'): Promise<void> {
-    this.assertHubId(webhookId);
+    if (!HUB_ID.test(webhookId)) throw new BadRequestException(`invalid hub id: ${webhookId}`);
     await this.http.put(`/webhooks/${webhookId}/status`, { status });
   }
 
   /** PUT /api/v1/webhooks/:id/secret — grava o secret usado para assinar o inbound. */
   async setWebhookSecret(webhookId: string, secret: string): Promise<void> {
-    this.assertHubId(webhookId);
+    if (!HUB_ID.test(webhookId)) throw new BadRequestException(`invalid hub id: ${webhookId}`);
     await this.http.put(`/webhooks/${webhookId}/secret`, { secret });
   }
 
@@ -258,7 +257,7 @@ export class EvoHubClient {
    *    register-with-own-secret, igual ao provision.
    */
   async ensureChannelWebhook(channelId: string, webhookUrl: string): Promise<void> {
-    this.assertHubId(channelId);
+    if (!HUB_ID.test(channelId)) throw new BadRequestException(`invalid hub id: ${channelId}`);
 
     const associated = await this.listChannelWebhooks(channelId);
     const match = associated.find((w) => w.url === webhookUrl);
@@ -336,7 +335,7 @@ export class EvoHubClient {
    * Evolution; 'byo' exige channel_credentials no hub.
    */
   async connectToMeta(channelId: string, req: MetaConnectRequest): Promise<MetaConnectResponse> {
-    this.assertHubId(channelId);
+    if (!HUB_ID.test(channelId)) throw new BadRequestException(`invalid hub id: ${channelId}`);
     const { data } = await this.http.post(`/channels/${channelId}/meta-connect`, req);
     return data;
   }
