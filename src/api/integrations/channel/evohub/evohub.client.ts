@@ -53,15 +53,15 @@ export interface HubChannel {
   meta_connection?: HubMetaConnection | null;
 }
 
-// SSRF guard: channel/webhook ids do hub são UUID (o hub faz uuid.Parse). O teste roda
-// INLINE em cada método que interpola o id no path da request — recusa path/URL injection
-// vinda de req.params/req.body em vez de repassá-la ao control-plane. Extrair o guard para
-// um método (`assertHubId`) protege igual em runtime, mas a análise de fluxo do CodeQL não
-// o reconhece como barreira através da fronteira de função e o js/request-forgery continua
-// acusando o sink; o teste inline é o que satisfaz scanner e runtime ao mesmo tempo.
+// SSRF guard: hub channel/webhook ids are UUIDs (the hub runs uuid.Parse). The test is
+// INLINE in every method that interpolates an id into the request path, so path/URL
+// injection coming from req.params/req.body is rejected instead of being forwarded to the
+// control-plane. Keep it inline: a guard extracted into its own method protects at runtime
+// just the same, but CodeQL's taint analysis does not carry a throwing guard across a
+// function boundary and js/request-forgery keeps flagging the sink.
 const HUB_ID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
-// Webhook do hub (WebhookResponse — webhook.go:116). Só os campos que usamos.
+// Hub webhook (WebhookResponse — webhook.go:116). Only the fields we use.
 export interface HubWebhookInfo {
   id: string;
   name?: string;
@@ -174,16 +174,16 @@ export class EvoHubClient {
     return this.listChannels(type);
   }
 
-  // ---- Webhooks (inbound do hub -> evolution-api) ----
+  // ---- Webhooks (hub inbound -> evolution-api) ----
 
-  /** Webhooks já ASSOCIADOS ao canal: GET /api/v1/channels/:id/webhooks → { webhooks, count }. */
+  /** Webhooks already ASSOCIATED with the channel: GET /api/v1/channels/:id/webhooks → { webhooks, count }. */
   async listChannelWebhooks(channelId: string): Promise<HubWebhookInfo[]> {
     if (!HUB_ID.test(channelId)) throw new BadRequestException(`invalid hub id: ${channelId}`);
     const { data } = await this.http.get(`/channels/${channelId}/webhooks`);
     return this.normalizeWebhookList(data);
   }
 
-  /** Todos os webhooks do usuário da API-key: GET /api/v1/webhooks. */
+  /** Every webhook owned by the API-key user: GET /api/v1/webhooks. */
   async listWebhooks(): Promise<HubWebhookInfo[]> {
     const { data } = await this.http.get('/webhooks');
     return this.normalizeWebhookList(data);
@@ -196,7 +196,7 @@ export class EvoHubClient {
     return [];
   }
 
-  /** POST /api/v1/webhooks/:id/associate — associa um webhook existente ao canal. */
+  /** POST /api/v1/webhooks/:id/associate — associates an existing webhook with the channel. */
   async associateWebhook(webhookId: string, channelId: string): Promise<void> {
     if (!HUB_ID.test(webhookId)) throw new BadRequestException(`invalid hub id: ${webhookId}`);
     if (!HUB_ID.test(channelId)) throw new BadRequestException(`invalid hub id: ${channelId}`);
@@ -204,33 +204,33 @@ export class EvoHubClient {
   }
 
   /**
-   * PUT /api/v1/webhooks/:id/status — reativa/desativa um webhook. O hub só aceita
-   * `active`|`inactive`; reativar com `active` é o caminho oficial para tirar um
-   * webhook do estado auto-`disabled` (webhook.go:104).
+   * PUT /api/v1/webhooks/:id/status — activates/deactivates a webhook. The hub only accepts
+   * `active`|`inactive`; setting `active` is its official way out of the auto-`disabled`
+   * state (webhook.go:104).
    */
   async setWebhookStatus(webhookId: string, status: 'active' | 'inactive'): Promise<void> {
     if (!HUB_ID.test(webhookId)) throw new BadRequestException(`invalid hub id: ${webhookId}`);
     await this.http.put(`/webhooks/${webhookId}/status`, { status });
   }
 
-  /** PUT /api/v1/webhooks/:id/secret — grava o secret usado para assinar o inbound. */
+  /** PUT /api/v1/webhooks/:id/secret — stores the secret the hub signs the inbound with. */
   async setWebhookSecret(webhookId: string, secret: string): Promise<void> {
     if (!HUB_ID.test(webhookId)) throw new BadRequestException(`invalid hub id: ${webhookId}`);
     await this.http.put(`/webhooks/${webhookId}/secret`, { secret });
   }
 
   /**
-   * Reescreve o WEBHOOK_SECRET configurado num webhook que estamos REUSANDO. O hub só
-   * assina o inbound quando o webhook tem secret gravado (webhook_dispatcher.go:983) e
-   * o WebhookResponse NÃO expõe o secret nem um `has_secret` (webhook.go:116) — não há
-   * como detectar drift, então reescrevemos sempre. Sem isso, um webhook criado em soft
-   * mode (secret vazio) ou com secret antigo é reusado como se estivesse pronto, o hub
-   * entrega sem assinatura/com assinatura errada, o verifyHmac responde 401 e o canal
-   * fica surdo — o mesmo sintoma que este fluxo existe para matar. Pior: o webhook é
-   * COMPARTILHADO entre os canais, então o 401 repetido leva o hub a auto-desabilitá-lo
-   * e derruba o inbound de todos eles.
+   * Rewrites the configured WEBHOOK_SECRET on a webhook we are REUSING. The hub only signs
+   * the inbound delivery when the webhook has a secret stored (webhook_dispatcher.go:983),
+   * and its WebhookResponse exposes neither the secret nor a `has_secret` flag
+   * (webhook.go:116) — drift is undetectable from here, so we always rewrite. Without this,
+   * a webhook created in soft mode (empty secret) or carrying a rotated-away secret is
+   * reused as if it were ready: the hub delivers unsigned (or wrongly signed), verifyHmac
+   * answers 401 and the channel goes deaf — the very symptom this flow exists to kill.
+   * Worse, the webhook is SHARED across channels, so the repeated 401 makes the hub
+   * auto-disable it and takes the inbound of every channel down with it.
    *
-   * Secret vazio → soft mode: o inbound aceita sem assinatura, nada a garantir.
+   * Empty secret → soft mode: the inbound accepts unsigned payloads, nothing to enforce.
    */
   private async syncWebhookSecret(webhookId: string): Promise<void> {
     const secret = this.configService.get<EvolutionHub>('EVOLUTION_HUB').WEBHOOK_SECRET;
@@ -239,22 +239,22 @@ export class EvoHubClient {
   }
 
   /**
-   * Garante (idempotente) que o canal tem um webhook ATIVO apontando para
-   * `webhookUrl` — o caminho single-shot do provision não existe no link-existing,
-   * e sem webhook (ou com webhook não-`active`) o canal envia mas nunca RECEBE.
+   * Idempotently guarantees the channel has an ACTIVE webhook pointing at `webhookUrl`.
+   * The single-shot registration the provision flow gets does not exist in link-existing,
+   * and with no webhook (or a non-`active` one) the channel SENDS but never RECEIVES.
    *
-   * O dispatcher do hub só entrega quando `status == 'active'` (webhook_dispatcher.go:294);
-   * um webhook em `disabled` (auto-desativado após falhas de entrega) ou `inactive`
-   * casa a URL mas NÃO entrega, então reativamos em vez de tratar como pronto —
-   * senão o re-link responde 201 e o canal segue surdo. Em todo REUSO o secret é
-   * reescrito antes da reativação (syncWebhookSecret) — um webhook com secret
-   * defasado tomaria 401 no inbound e voltaria a ser auto-desabilitado. Ordem:
-   * 1) já associado ao canal com a mesma URL → garante secret e reativa se preciso;
-   * 2) webhook do usuário com a mesma URL → garante secret, reativa e associa
-   *    (all_channels já cobre o canal, então só garante que está ativo);
-   * 3) cria novo com `channels: [channelId]` (single-shot) e `events: []`
-   *    (vazio = TODOS os eventos — webhook_service.go:98). Secret = recipe
-   *    register-with-own-secret, igual ao provision.
+   * The hub's dispatcher only delivers when `status == 'active'` (webhook_dispatcher.go:294);
+   * a webhook in `disabled` (auto-disabled after repeated delivery failures) or `inactive`
+   * matches the URL but does NOT deliver, so we reactivate instead of treating it as ready —
+   * otherwise the re-link answers 201 and the channel stays deaf. Every REUSE path rewrites
+   * the secret before reactivating (syncWebhookSecret): a webhook with a stale secret would
+   * take another 401 on the inbound and get auto-disabled right back. Order:
+   * 1) already associated with the channel, same URL → enforce the secret, reactivate if needed;
+   * 2) user-level webhook with the same URL → enforce the secret, reactivate and associate
+   *    (all_channels already covers the channel, so only ensure it is active);
+   * 3) none → create it with `channels: [channelId]` (single-shot) and `events: []`
+   *    (empty = ALL events — webhook_service.go:98). Secret follows the
+   *    register-with-own-secret recipe, same as provision.
    */
   async ensureChannelWebhook(channelId: string, webhookUrl: string): Promise<void> {
     if (!HUB_ID.test(channelId)) throw new BadRequestException(`invalid hub id: ${channelId}`);
