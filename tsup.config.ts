@@ -33,6 +33,7 @@ export default defineConfig({
       ...(options.alias ?? {}),
       '@prisma/client': path.resolve(process.cwd(), 'prisma/generated/client/client.ts'),
     };
+  },
   define: {
     __LICENSE_ENDPOINT_ENCODED__: licenseEndpointEncoded,
     __LICENSE_ENDPOINT_XOR_KEY__: licenseEndpointXorKey,
