@@ -214,6 +214,31 @@ export class EvoHubClient {
     await this.http.put(`/webhooks/${webhookId}/status`, { status });
   }
 
+  /** PUT /api/v1/webhooks/:id/secret — grava o secret usado para assinar o inbound. */
+  async setWebhookSecret(webhookId: string, secret: string): Promise<void> {
+    this.assertHubId(webhookId);
+    await this.http.put(`/webhooks/${webhookId}/secret`, { secret });
+  }
+
+  /**
+   * Reescreve o WEBHOOK_SECRET configurado num webhook que estamos REUSANDO. O hub só
+   * assina o inbound quando o webhook tem secret gravado (webhook_dispatcher.go:983) e
+   * o WebhookResponse NÃO expõe o secret nem um `has_secret` (webhook.go:116) — não há
+   * como detectar drift, então reescrevemos sempre. Sem isso, um webhook criado em soft
+   * mode (secret vazio) ou com secret antigo é reusado como se estivesse pronto, o hub
+   * entrega sem assinatura/com assinatura errada, o verifyHmac responde 401 e o canal
+   * fica surdo — o mesmo sintoma que este fluxo existe para matar. Pior: o webhook é
+   * COMPARTILHADO entre os canais, então o 401 repetido leva o hub a auto-desabilitá-lo
+   * e derruba o inbound de todos eles.
+   *
+   * Secret vazio → soft mode: o inbound aceita sem assinatura, nada a garantir.
+   */
+  private async syncWebhookSecret(webhookId: string): Promise<void> {
+    const secret = this.configService.get<EvolutionHub>('EVOLUTION_HUB').WEBHOOK_SECRET;
+    if (!secret) return;
+    await this.setWebhookSecret(webhookId, secret);
+  }
+
   /**
    * Garante (idempotente) que o canal tem um webhook ATIVO apontando para
    * `webhookUrl` — o caminho single-shot do provision não existe no link-existing,
@@ -222,10 +247,12 @@ export class EvoHubClient {
    * O dispatcher do hub só entrega quando `status == 'active'` (webhook_dispatcher.go:294);
    * um webhook em `disabled` (auto-desativado após falhas de entrega) ou `inactive`
    * casa a URL mas NÃO entrega, então reativamos em vez de tratar como pronto —
-   * senão o re-link responde 201 e o canal segue surdo. Ordem:
-   * 1) já associado ao canal com a mesma URL → reativa se não estiver `active`;
-   * 2) webhook do usuário com a mesma URL → reativa e associa (all_channels já
-   *    cobre o canal, então só garante que está ativo);
+   * senão o re-link responde 201 e o canal segue surdo. Em todo REUSO o secret é
+   * reescrito antes da reativação (syncWebhookSecret) — um webhook com secret
+   * defasado tomaria 401 no inbound e voltaria a ser auto-desabilitado. Ordem:
+   * 1) já associado ao canal com a mesma URL → garante secret e reativa se preciso;
+   * 2) webhook do usuário com a mesma URL → garante secret, reativa e associa
+   *    (all_channels já cobre o canal, então só garante que está ativo);
    * 3) cria novo com `channels: [channelId]` (single-shot) e `events: []`
    *    (vazio = TODOS os eventos — webhook_service.go:98). Secret = recipe
    *    register-with-own-secret, igual ao provision.
@@ -236,6 +263,7 @@ export class EvoHubClient {
     const associated = await this.listChannelWebhooks(channelId);
     const match = associated.find((w) => w.url === webhookUrl);
     if (match) {
+      await this.syncWebhookSecret(match.id);
       if (match.status !== 'active') await this.setWebhookStatus(match.id, 'active');
       return;
     }
@@ -243,6 +271,7 @@ export class EvoHubClient {
     const all = await this.listWebhooks();
     const existing = all.find((w) => w.url === webhookUrl);
     if (existing) {
+      await this.syncWebhookSecret(existing.id);
       if (existing.status !== 'active') await this.setWebhookStatus(existing.id, 'active');
       if (!existing.all_channels) await this.associateWebhook(existing.id, channelId);
       return;
