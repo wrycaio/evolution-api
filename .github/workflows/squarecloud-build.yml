@@ -18,9 +18,10 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Install and build
+      - name: Install, generate Prisma types and build
         run: |
           npm install --ignore-scripts
+          npm run db:generate
           npm run build
 
       - name: Push compiled code to squarecloud branch
