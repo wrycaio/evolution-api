@@ -1,0 +1,2 @@
+var a=class{constructor(t){this.waMonitor=t}async fetchCatalog({instanceName:t},o){return await this.waMonitor.waInstances[t].fetchCatalog(t,o)}async fetchCollections({instanceName:t},o){return await this.waMonitor.waInstances[t].fetchCollections(t,o)}};export{a as BusinessController};
+//# sourceMappingURL=business.controller.mjs.map

@@ -1,0 +1,2 @@
+var o=Object.defineProperty;var g=Object.getOwnPropertyDescriptor;var i=Object.getOwnPropertyNames;var l=Object.prototype.hasOwnProperty;var p=(r,s)=>{for(var t in s)o(r,t,{get:s[t],enumerable:!0})},b=(r,s,t,a)=>{if(s&&typeof s=="object"||typeof s=="function")for(let n of i(s))!l.call(r,n)&&n!==t&&o(r,n,{get:()=>s[n],enumerable:!(a=g(s,n))||a.enumerable});return r};var c=r=>b(o({},"__esModule",{value:!0}),r);var d={};p(d,{ProxyDto:()=>e});module.exports=c(d);var e=class{};0&&(module.exports={ProxyDto});
+//# sourceMappingURL=proxy.dto.js.map

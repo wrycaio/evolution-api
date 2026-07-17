@@ -1,0 +1,2 @@
+var s=class{constructor(t){this.settingsService=t}async createSettings(t,e){return this.settingsService.create(t,e)}async findSettings(t){return this.settingsService.find(t)}};export{s as SettingsController};
+//# sourceMappingURL=settings.controller.mjs.map

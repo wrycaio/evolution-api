@@ -1,0 +1,2 @@
+import{v4 as r}from"uuid";var n=(...t)=>{let e={};return t.forEach(o=>e[o]={minLength:1,description:`The "${o}" cannot be empty`}),{if:{propertyNames:{enum:[...t]}},then:{properties:e}}},s={$id:r(),type:"object",properties:{enabled:{type:"boolean",enum:[!0,!1]},host:{type:"string"},port:{type:"string"},protocol:{type:"string"},username:{type:"string"},password:{type:"string"}},required:["enabled","host","port","protocol"],...n("enabled","host","port","protocol")};export{s as proxySchema};
+//# sourceMappingURL=proxy.schema.mjs.map

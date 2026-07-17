@@ -1,0 +1,2 @@
+import{v4 as m}from"uuid";var r=(...e)=>{let t={};return e.forEach(n=>t[n]={minLength:1,description:`The "${n}" cannot be empty`}),{if:{propertyNames:{enum:[...e]}},then:{properties:t}}},i={$id:m(),type:"object",properties:{name:{type:"string"},hsmId:{type:"string"}},required:["name"],...r("name")};export{i as templateDeleteSchema};
+//# sourceMappingURL=templateDelete.schema.mjs.map

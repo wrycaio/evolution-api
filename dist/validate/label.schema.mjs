@@ -1,0 +1,2 @@
+import{v4 as i}from"uuid";var o=(...e)=>{let n={};return e.forEach(t=>n[t]={minLength:1,description:`The "${t}" cannot be empty`}),{if:{propertyNames:{enum:[...e]}},then:{properties:n}}},r={type:"string",description:"Invalid format"},a={$id:i(),type:"object",properties:{number:{...r},labelId:{type:"string"},action:{type:"string",enum:["add","remove"]}},required:["number","labelId","action"],...o("number","labelId","action")};export{a as handleLabelSchema};
+//# sourceMappingURL=label.schema.mjs.map

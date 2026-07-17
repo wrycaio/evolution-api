@@ -5,8 +5,7 @@ const run = (cmd) => {
   execSync(cmd, { stdio: "inherit" })
 }
 
-// --ignore-scripts pula o husky (git hook de dev, não roda em produção)
 run("npm install --ignore-scripts")
-run("npm run build")
-run("npm run db:deploy")
+run("npm run db:generate")   // gera o Prisma client para esta plataforma
+run("npm run db:deploy")     // aplica migrations
 execSync("node dist/main", { stdio: "inherit" })

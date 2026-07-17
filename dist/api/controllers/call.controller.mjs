@@ -1,0 +1,2 @@
+var r=class{constructor(o){this.waMonitor=o}async offerCall({instanceName:o},t){return await this.waMonitor.waInstances[o].offerCall(t)}};export{r as CallController};
+//# sourceMappingURL=call.controller.mjs.map

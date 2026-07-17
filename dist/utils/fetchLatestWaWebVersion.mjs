@@ -1,0 +1,2 @@
+import n from"axios";import{fetchLatestBaileysVersion as t}from"baileys";var v=async i=>{try{let{data:e}=await n.get("https://web.whatsapp.com/sw.js",{...i,responseType:"json"}),o=/\\?"client_revision\\?":\s*(\d+)/,s=e.match(o);return s?.[1]?{version:[2,3e3,+s[1]],isLatest:!0}:{version:(await t()).version,isLatest:!1,error:{message:"Could not find client revision in the fetched content"}}}catch(e){return{version:(await t()).version,isLatest:!1,error:e}}};export{v as fetchLatestWaWebVersion};
+//# sourceMappingURL=fetchLatestWaWebVersion.mjs.map

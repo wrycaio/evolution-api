@@ -1,0 +1,2 @@
+var i=class{constructor(e){this.s3Service=e}async getMedia(e,t){return this.s3Service.getMedia(e,t)}async getMediaUrl(e,t){return this.s3Service.getMediaUrl(e,t)}};export{i as S3Controller};
+//# sourceMappingURL=s3.controller.mjs.map

@@ -1,0 +1,2 @@
+var i=class{},t=class{},r=class{},e=class{},n=class{},g=class{},a=class{},c=class{},o=class{},x=class extends n{},d=class extends n{},l=class extends n{};export{c as AcceptGroupInvite,i as CreateGroupDto,g as GetParticipant,e as GroupDescriptionDto,a as GroupInvite,n as GroupJid,t as GroupPictureDto,o as GroupSendInvite,r as GroupSubjectDto,l as GroupToggleEphemeralDto,x as GroupUpdateParticipantDto,d as GroupUpdateSettingDto};
+//# sourceMappingURL=group.dto.mjs.map

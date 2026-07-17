@@ -1,0 +1,1 @@
+{"version":3,"sources":["../../../src/api/dto/call.dto.ts"],"sourcesContent":["export class Metadata {\n  number: string;\n}\n\nexport class OfferCallDto extends Metadata {\n  isVideo?: boolean;\n  callDuration?: number;\n}\n"],"mappings":"AAAO,IAAMA,EAAN,KAAe,CAEtB,EAEaC,EAAN,cAA2BD,CAAS,CAG3C","names":["Metadata","OfferCallDto"]}

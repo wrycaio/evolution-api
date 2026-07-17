@@ -1,0 +1,2 @@
+var a=class{constructor(t){this.waMonitor=t}async fetchLabels({instanceName:t}){return await this.waMonitor.waInstances[t].fetchLabels()}async handleLabel({instanceName:t},n){return await this.waMonitor.waInstances[t].handleLabel(n)}};export{a as LabelController};
+//# sourceMappingURL=label.controller.mjs.map

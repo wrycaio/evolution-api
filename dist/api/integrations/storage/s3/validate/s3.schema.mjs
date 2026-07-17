@@ -1,0 +1,2 @@
+import{v4 as r}from"uuid";var n=(...e)=>{let t={};return e.forEach(i=>t[i]={minLength:1,description:`The "${i}" cannot be empty`}),{if:{propertyNames:{enum:[...e]}},then:{properties:t}}},s={$id:r(),type:"object",properties:{id:{type:"string"},type:{type:"string"},messageId:{type:"integer"}},...n("id","type","messageId")},m={$id:r(),type:"object",properties:{id:{type:"string",pattern:"\\d+",minLength:1},expiry:{type:"string",pattern:"\\d+",minLength:1}},...n("id"),required:["id"]};export{s as s3Schema,m as s3UrlSchema};
+//# sourceMappingURL=s3.schema.mjs.map

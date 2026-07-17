@@ -1,0 +1,2 @@
+import{v4 as o}from"uuid";var r=(...e)=>{let t={};return e.forEach(n=>t[n]={minLength:1,description:`The "${n}" cannot be empty`}),{if:{propertyNames:{enum:[...e]}},then:{properties:t}}},a={$id:o(),type:"object",properties:{templateId:{type:"string"},category:{type:"string",enum:["AUTHENTICATION","MARKETING","UTILITY"]},allowCategoryChange:{type:"boolean"},ttl:{type:"number"},components:{type:"array"}},required:["templateId"],...r("templateId")};export{a as templateEditSchema};
+//# sourceMappingURL=templateEdit.schema.mjs.map
