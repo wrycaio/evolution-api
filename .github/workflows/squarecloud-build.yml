@@ -1,0 +1,35 @@
+name: Build for Square Cloud
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install and build
+        run: |
+          npm install --ignore-scripts
+          npm run build
+
+      - name: Push compiled code to squarecloud branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -B squarecloud
+          cp start.prod.js start.js
+          git add -f dist/ start.js
+          git diff --cached --stat
+          git commit -m "build: compiled dist for Square Cloud [skip ci]" || echo "Nothing to commit"
+          git push --force origin squarecloud
